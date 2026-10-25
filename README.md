@@ -1,0 +1,1 @@
+# practica_Konf_Upravl2
