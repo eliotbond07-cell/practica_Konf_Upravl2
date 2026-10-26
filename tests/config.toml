@@ -1,0 +1,6 @@
+package_name = "musl"
+repo_url = "https://dl-cdn.alpinelinux.org/alpine/v3.19/main"
+test_mode = false
+repo_file_path = "tests/sample_repo.txt"
+output_image = "deps.png"
+ascii_tree = true
