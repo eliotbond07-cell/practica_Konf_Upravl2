@@ -2,10 +2,13 @@ PYTHON  := python
 MAIN    := ./src/main.py
 CONFIG  := ./tests
 
-.PHONY: run run-missing run-missing-parms run-wrong-p-n run-wrong-r-u run-wrong-t-m run-wrong-r-f-p run-wrong-o-i run-wrong-a-t clean
+.PHONY: run run-openssh run-missing run-missing-parms run-wrong-p-n run-wrong-r-u run-wrong-t-m run-wrong-r-f-p run-wrong-o-i run-wrong-a-t clean
 
 run:
 	$(PYTHON) $(MAIN) --config $(CONFIG)/config.toml
+
+run-openssh:
+	$(PYTHON) $(MAIN) --config $(CONFIG)/config_openssh.toml
 
 run-missing:
 	$(PYTHON) $(MAIN) --config $(CONFIG)/missing.toml

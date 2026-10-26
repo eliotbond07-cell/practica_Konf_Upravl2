@@ -1,6 +1,8 @@
 @echo off
 python .\src\main.py --config .\tests\config.toml
 
+python .\src\main.py --config .\tests\config_openssh.toml
+
 python .\src\main.py --config .\tests\missing.toml
 
 python .\src\main.py --config .\tests\config_missing_parms.toml

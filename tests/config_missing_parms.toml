@@ -1,4 +1,4 @@
 package_name = "musl"
-repo_url = "https://dl-cdn.alpinelinux.org/alpine/v3.19/main"
+repo_url = "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64"
 repo_file_path = "tests/sample_repo.txt"
 ascii_tree = true
