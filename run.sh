@@ -3,6 +3,8 @@ python3 ./src/main.py --config ./tests/config/config.toml
 
 python3 ./src/main.py --config ./tests/config/config_openssh.toml
 
+python3 ./src/main.py --config ./tests/config/config_alpine_sdk.toml
+
 python3 ./src/main.py --config ./tests/config/config_linear.toml
 
 python3 ./src/main.py --config ./tests/config/config_cyclic.toml

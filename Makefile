@@ -2,13 +2,16 @@ PYTHON  := python
 MAIN    := ./src/main.py
 CONFIG  := ./tests/config
 
-.PHONY: run run-openssh run-linear run-cyclic run-branches run-error-test-repo run-hard clean
+.PHONY: run run-openssh run-alpine-sdk run-linear run-cyclic run-branches run-error-test-repo run-hard clean
 
 run:
 	$(PYTHON) $(MAIN) --config $(CONFIG)/config.toml
 
 run-openssh:
 	$(PYTHON) $(MAIN) --config $(CONFIG)/config_openssh.toml
+
+run-alpine-sdk:
+	$(PYTHON) $(MAIN) --config $(CONFIG)/config_alpine_sdk.toml
 
 run-linear:
 	$(PYTHON) $(MAIN) --config $(CONFIG)/config_linear.toml

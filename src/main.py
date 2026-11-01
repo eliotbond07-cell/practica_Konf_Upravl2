@@ -5,6 +5,8 @@ import sys
 import tarfile
 import urllib.error
 import urllib.request
+import shutil
+import subprocess
 from collections import deque
 
 try:
@@ -482,6 +484,78 @@ def load_source_graph(cfg):
     return graph
 
 
+def graph_to_dot(graph, package_name):
+    """Строит DOT-описание направленного графа зависимостей"""
+    lines = ["digraph dependencies {"]
+    lines.append('    rankdir="TB";')
+    lines.append('    node [shape=box, style=rounded];')
+    lines.append(f'    "{package_name}" [style="rounded,filled",'
+                 ' fillcolor="lightblue"];')
+    for node in sorted(graph):
+        for dep in graph[node]:
+            lines.append(f'    "{node}" -> "{dep}";')
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def save_dot_file(dot_text, output_image):
+    """Сохраняет .dot-файл рядом с output_image"""
+    base, _ = os.path.splitext(output_image)
+    path = base + ".dot"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(dot_text)
+    return path
+
+
+def render_png(dot_text, output_image):
+    """Рендерит PNG через graphviz dot. Возвращает True при успехе"""
+    if shutil.which("dot") is None:
+        return False
+    dot_file = save_dot_file(dot_text, output_image)
+    cmd = ["dot", "-Tpng", dot_file, "-o", output_image]
+    try:
+        subprocess.run(cmd, check=True,
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        print(f"[WARN] dot завершился с ошибкой: {exc.stderr}")
+        return False
+    return True
+
+
+def print_ascii_tree(graph, package_name):
+    """Печатает ASCII-дерево зависимостей пакета"""
+    print()
+    print(f"ASCII-дерево зависимостей от '{package_name}':")
+    lines = []
+    build_tree_lines(graph, package_name, "", set(), True, lines)
+    if not lines:
+        print("  (нет зависимостей)")
+        return
+    for line in lines:
+        print(line)
+
+
+def build_tree_lines(graph, node, prefix, path, is_last, lines):
+    """Рекурсивно собирает строки ASCII-дерева"""
+    connector = "└── " if is_last else "├── "
+    label = node
+    if node in path:
+        lines.append(prefix + connector + label + " (cycle)")
+        return
+    lines.append(prefix + connector + label)
+    deps = graph.get(node, [])
+    if not deps:
+        return
+    new_prefix = prefix + ("    " if is_last else "│   ")
+    new_path = path | {node}
+    for i, dep in enumerate(deps):
+        build_tree_lines(
+            graph, dep, new_prefix, new_path,
+            i == len(deps) - 1, lines,
+        )
+
+
 def parse_args(argv):
     """Разбирает параметры командной строки"""
     parser = argparse.ArgumentParser(
@@ -505,9 +579,24 @@ def run(cfg):
     subgraph = collect_subgraph(graph, order)
     cycles = find_cycles(subgraph)
     print_bfs_result(package, order, missing, cycles)
-    load_order, cyclic = kahn_order(subgraph, package)
-    print_load_order(package, load_order, cyclic)
+    visualize(cfg, subgraph, package)
     return 0
+
+
+def visualize(cfg, subgraph, package):
+    """DOT + PNG + опциональный ASCII-вывод"""
+    dot_text = graph_to_dot(subgraph, package)
+    dot_file = save_dot_file(dot_text, cfg["output_image"])
+    print()
+    print(f"[INFO] DOT сохранён: {dot_file}")
+    ok = render_png(dot_text, cfg["output_image"])
+    if ok:
+        print(f"[INFO] PNG сохранён: {cfg['output_image']}")
+    else:
+        print("[WARN] dot не найден (или упал), "
+              "PNG не сгенерирован. Установите graphviz.")
+    if cfg["ascii_tree"]:
+        print_ascii_tree(subgraph, package)
 
 
 def main(argv=None):

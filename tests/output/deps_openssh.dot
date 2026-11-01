@@ -1,0 +1,10 @@
+digraph dependencies {
+    rankdir="TB";
+    node [shape=box, style=rounded];
+    "openssh" [style="rounded,filled", fillcolor="lightblue"];
+    "openssh" -> "openssh-sftp-server";
+    "openssh" -> "openssh-server";
+    "openssh-keygen" -> "libcrypto3";
+    "openssh-server" -> "openssh-keygen";
+    "openssh-server" -> "openssh-server-common";
+}

@@ -1,0 +1,9 @@
+digraph dependencies {
+    rankdir="TB";
+    node [shape=box, style=rounded];
+    "A" [style="rounded,filled", fillcolor="lightblue"];
+    "A" -> "B";
+    "B" -> "C";
+    "C" -> "D";
+    "D" -> "A";
+}

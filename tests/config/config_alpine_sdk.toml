@@ -1,0 +1,6 @@
+package_name = "alpine-sdk"
+repo_url = "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64"
+test_mode = false
+repo_file_path = "tests/test_repo/test.txt"
+output_image = "tests/output/deps_alpine_sdk.png"
+ascii_tree = true

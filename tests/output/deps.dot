@@ -1,0 +1,9 @@
+digraph dependencies {
+    rankdir="TB";
+    node [shape=box, style=rounded];
+    "apk-tools" [style="rounded,filled", fillcolor="lightblue"];
+    "apk-tools" -> "musl";
+    "apk-tools" -> "libcrypto3";
+    "apk-tools" -> "libapk";
+    "apk-tools" -> "ca-certificates-bundle";
+}

@@ -2,5 +2,5 @@ package_name = "musl"
 repo_url = "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64"
 test_mode = "no"
 repo_file_path = "tests/sample_repo.txt"
-output_image = "deps.png"
+output_image = "tests/output/deps5.png"
 ascii_tree = true
