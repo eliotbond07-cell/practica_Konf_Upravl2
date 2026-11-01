@@ -387,6 +387,44 @@ def get_direct_deps(index, package_name):
     return split_dependencies(record.get("D", ""))
 
 
+def reverse_graph(subgraph):
+    """Строит обратный граф: dep -> [пакеты, зависящие от dep]"""
+    reversed_g = {node: [] for node in subgraph}
+    for node, deps in subgraph.items():
+        for dep in deps:
+            if dep in reversed_g:
+                reversed_g[dep].append(node)
+    return reversed_g
+
+
+def kahn_order(subgraph, start):
+    """Топологический порядок загрузки
+
+    Возвращает (order, cyclic):
+      order — узлы в порядке загрузки
+      cyclic — узлы, оставшиеся после Kahn (входят в циклы
+               или зависят от них), дописаны в конец order
+    """
+    if start not in subgraph:
+        raise PackageNotFoundError(
+            f"Пакет '{start}' отсутствует в подграфе"
+        )
+    reversed_g = reverse_graph(subgraph)
+    in_deg = {node: len(subgraph[node]) for node in subgraph}
+    queue = deque(n for n, d in in_deg.items() if d == 0)
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for dependent in reversed_g[node]:
+            in_deg[dependent] -= 1
+            if in_deg[dependent] == 0:
+                queue.append(dependent)
+    cyclic = [n for n in subgraph if n not in set(order)]
+    order.extend(sorted(cyclic))
+    return order, cyclic
+
+
 def print_direct_deps(package_name, deps):
     """Печатает прямые зависимости пакета"""
     print(f"Прямые зависимости пакета '{package_name}':")
@@ -415,6 +453,21 @@ def print_bfs_result(package_name, order, missing, cycles):
             print("  - " + " -> ".join(c) + " -> " + c[0])
     else:
         print("Циклических зависимостей не найдено.")
+
+
+def print_load_order(package_name, order, cyclic):
+    """Печатает порядок загрузки зависимостей"""
+    print()
+    print(f"Порядок загрузки зависимостей для '{package_name}':")
+    for i, node in enumerate(order, start=1):
+        print(f"  {i:>3}. {node}")
+    if cyclic:
+        print()
+        print("[WARN] В графе есть цикл/циклы. "
+              f"Узлы, попавшие в цикл: {', '.join(sorted(cyclic))}")
+        print("  Они дописаны в конец порядка в алфавитном "
+              "порядке — истинный порядок загрузки "
+              "для них не определён.")
 
 
 def load_source_graph(cfg):
@@ -452,6 +505,8 @@ def run(cfg):
     subgraph = collect_subgraph(graph, order)
     cycles = find_cycles(subgraph)
     print_bfs_result(package, order, missing, cycles)
+    load_order, cyclic = kahn_order(subgraph, package)
+    print_load_order(package, load_order, cyclic)
     return 0
 
 
