@@ -1,0 +1,6 @@
+package_name = "A"
+repo_url = "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64"
+test_mode = true
+repo_file_path = "tests/test_repo/repo_branches.txt"
+output_image = "deps.png"
+ascii_tree = true

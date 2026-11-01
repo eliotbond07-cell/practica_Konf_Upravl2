@@ -5,6 +5,7 @@ import sys
 import tarfile
 import urllib.error
 import urllib.request
+from collections import deque
 
 try:
     import tomllib
@@ -37,6 +38,10 @@ class FetchError(Exception):
 
 class PackageNotFoundError(Exception):
     """Генерируется, если пакет отсутствует в индексе"""
+
+
+class TestRepoError(Exception):
+    """Ошибка чтения тестового репозитория"""
 
 
 def load_config(path):
@@ -229,6 +234,149 @@ def split_dependencies(raw_deps):
     return result
 
 
+def parse_test_repo_line(line, line_no):
+    """Парсит одну строку тестового файла, получается (имя, [deps])"""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    if ":" not in stripped:
+        raise TestRepoError(
+            f"Строка {line_no}: ожидается формат 'ИМЯ: deps'"
+        )
+    name, raw_deps = stripped.split(":", 1)
+    name = name.strip()
+    if not name:
+        raise TestRepoError(
+            f"Строка {line_no}: пустое имя пакета"
+        )
+    if not name.isalpha() or not name.isupper():
+        raise TestRepoError(
+            f"Строка {line_no}: имя '{name}' должно быть A-Z"
+        )
+    deps = [d for d in raw_deps.split() if d]
+    for dep in deps:
+        if not dep.isalpha() or not dep.isupper():
+            raise TestRepoError(
+                f"Строка {line_no}: зависимость '{dep}' "
+                f"должна быть A-Z"
+            )
+    return name, deps
+
+
+def load_test_graph(path):
+    """Читает тестовый файл и возвращает dict {имя: [deps]}"""
+    graph = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line_no, line in enumerate(f, start=1):
+                parsed = parse_test_repo_line(line, line_no)
+                if parsed is None:
+                    continue
+                name, deps = parsed
+                graph[name] = deps
+    except OSError as exc:
+        raise TestRepoError(f"Не удалось прочитать {path}: {exc}")
+    if not graph:
+        raise TestRepoError(f"Тестовый репозиторий пуст: {path}")
+    return graph
+
+
+def build_bfs_order(graph, start):
+    """BFS от start. Возвращает (order, missing).
+    Обрабатывает циклы: каждый узел попадает в order один раз
+
+    order — список пакетов в порядке обхода
+    missing — пакеты, встреченные как зависимости, но отсутствующие
+              в графе как ключи
+    """
+    if start not in graph:
+        raise PackageNotFoundError(
+            f"Пакет '{start}' отсутствует в графе"
+        )
+    order = []
+    missing = set()
+    visited = {start}
+    queue = deque([start])
+    while queue:
+        current = queue.popleft()
+        order.append(current)
+        for dep in graph.get(current, []):
+            if dep not in graph:
+                missing.add(dep)
+                continue
+            if dep in visited:
+                continue
+            visited.add(dep)
+            queue.append(dep)
+    return order, missing
+
+
+def collect_subgraph(graph, order):
+    """Возвращает подграф только из узлов order (deps внутри order)"""
+    allowed = set(order)
+    return {
+        node: [d for d in graph.get(node, []) if d in allowed]
+        for node in order
+    }
+
+
+def find_cycles(graph):
+    """Итеративный DFS, возвращает список найденных циклов.
+    Каждый цикл — список узлов без замыкания (A -> B -> A
+    представлен как [A, B])
+    """
+    cycles = []
+    seen_cycles = set()
+    color = {}
+    for start in graph:
+        if color.get(start):
+            continue
+        stack = [(start, iter(graph.get(start, [])))]
+        path = [start]
+        color[start] = 1
+        while stack:
+            node, it = stack[-1]
+            advanced = False
+            for dep in it:
+                if dep not in graph:
+                    continue
+                state = color.get(dep, 0)
+                if state == 0:
+                    color[dep] = 1
+                    stack.append((dep, iter(graph.get(dep, []))))
+                    path.append(dep)
+                    advanced = True
+                    break
+                if state == 1:
+                    record_cycle(path, dep, cycles, seen_cycles)
+            if not advanced:
+                color[node] = 2
+                stack.pop()
+                path.pop()
+    return cycles
+
+
+def record_cycle(path, dep, cycles, seen):
+    """Регистрирует цикл, если он ещё не встречался"""
+    try:
+        idx = path.index(dep)
+    except ValueError:
+        return
+    cycle = tuple(path[idx:])
+    key = canonical_cycle(cycle)
+    if key in seen:
+        return
+    seen.add(key)
+    cycles.append(list(cycle))
+
+
+def canonical_cycle(cycle):
+    """Приводит цикл к лексико-графическрму минимуму"""
+    n = len(cycle)
+    rotations = [cycle[i:] + cycle[:i] for i in range(n)]
+    return min(rotations)
+
+
 def get_direct_deps(index, package_name):
     """Возвращает список прямых зависимостей пакета"""
     record = index.get(package_name)
@@ -249,6 +397,38 @@ def print_direct_deps(package_name, deps):
         print(f"  - {dep}")
 
 
+def print_bfs_result(package_name, order, missing, cycles):
+    """Печатает порядок обхода BFS и наличие циклических зависимостей"""
+    print()
+    print(f"Порядок обхода BFS от '{package_name}':")
+    for i, node in enumerate(order, start=1):
+        print(f"  {i:>3}. {node}")
+    print()
+    print(f"Всего узлов в графе: {len(order)}")
+    if missing:
+        print("Отсутствуют в индексе (только упомянуты):")
+        for m in sorted(missing):
+            print(f"  - {m}")
+    if cycles:
+        print(f"Найдено циклических зависимостей: {len(cycles)}")
+        for c in cycles:
+            print("  - " + " -> ".join(c) + " -> " + c[0])
+    else:
+        print("Циклических зависимостей не найдено.")
+
+
+def load_source_graph(cfg):
+    """Возвращает dict {имя: [deps]} из тестового файла или APKINDEX"""
+    if cfg["test_mode"]:
+        return load_test_graph(cfg["repo_file_path"])
+    index = load_apkindex(cfg["repo_url"])
+    graph = {
+        name: split_dependencies(rec.get("D", ""))
+        for name, rec in index.items()
+    }
+    return graph
+
+
 def parse_args(argv):
     """Разбирает параметры командной строки"""
     parser = argparse.ArgumentParser(
@@ -263,14 +443,15 @@ def parse_args(argv):
 
 
 def run(cfg):
-    """Запуск извлечения зависимостей"""
-    if cfg["test_mode"]:
-        print("[INFO] test_mode=true, реальный репозиторий не читаем")
-        return 0
-    index = load_apkindex(cfg["repo_url"])
-    print(f"[INFO] Пакетов в индексе: {len(index)}")
-    deps = get_direct_deps(index, cfg["package_name"])
-    print_direct_deps(cfg["package_name"], deps)
+    """Запуск извлечения графа зависимостей"""
+    print_config(cfg)
+    graph = load_source_graph(cfg)
+    print(f"[INFO] Всего пакетов в источнике: {len(graph)}")
+    package = cfg["package_name"]
+    order, missing = build_bfs_order(graph, package)
+    subgraph = collect_subgraph(graph, order)
+    cycles = find_cycles(subgraph)
+    print_bfs_result(package, order, missing, cycles)
     return 0
 
 
@@ -282,8 +463,8 @@ def main(argv=None):
         check_keys(raw)
         cfg = validate_config(raw)
         return run(cfg)
-    except (ConfigError, FetchError,
-            PackageNotFoundError) as exc:
+    except (ConfigError, FetchError, PackageNotFoundError,
+            TestRepoError) as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 1
 
